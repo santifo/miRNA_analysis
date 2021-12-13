@@ -30,7 +30,7 @@ perl pita_prediction.pl -utr 3UTR_sequences.fa -mir miR_mature.fa -prefix string
 
 miranda miR_mature.fa 3UTR_sequences.fa -out outfile
 
-#Script for comparison
+#Script for comparison of target predictions
 
 #!/usr/bin/python
 
