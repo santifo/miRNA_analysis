@@ -120,6 +120,6 @@ result_CC_Fisher <- runTest(GO_CC_data, algorithm = "classic", statistic = "fish
 
 all_BP_Res <- GenTable(GO_BP_data, classicFisher = result_BP_Fisher, topNodes = Nodes) #optionally numChar=1000 prevents trimming of GO descriptions
 all_BP_Res$classicFisher <- as.numeric(all_BP_Res$classicFisher)
-all_BP_Res <- all_BP_Res[all_BP_Res$classicFisher<0.05,]
+all_BP_Res <- all_BP_Res[all_BP_Res$classicFisher<0.01,]
 all_BP_Res <- all_BP_Res[,c("GO.ID","Term","classicFisher")]
 all_BP_Res
