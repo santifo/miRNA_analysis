@@ -1,0 +1,125 @@
+# Adapter trimming and quality control
+
+trim_galore -q 20 --length 18 --fastqc infile.fq > outfile.fq
+
+#Collapse reads
+
+collapse_reads.pl reads.fa > collapsed_reads.fa
+
+# Mapping
+
+bowtie -q -v 2 -S -p 10 index infile.fq outfile.sam --al aligned_reads.fa
+
+# Identification and quantification of miRNAs
+
+bwa_sam_converter.pl -i mapped_reads.sam -a mapped_reads.arf
+
+miRDeep2.pl collapsed_reads.fa genome.fa mapped_reads.arf species_mature.fa other_mature.fa species_precursor.fa -s species_star.fa> report.log
+
+## miRNA target predictions
+
+#TargetScan
+
+perl targetscan_70.pl miR_seeds.txt 3UTR_sequences.txt outfile
+
+#PITA
+
+perl pita_prediction.pl -utr 3UTR_sequences.fa -mir miR_mature.fa -prefix string
+
+#Miranda
+
+miranda miR_mature.fa 3UTR_sequences.fa -out outfile
+
+#Script for comparison
+
+#!/usr/bin/python
+
+fm = open("miranda_targets_list", 'r')
+fp = open("pita_targets_list", 'r')
+fg = open("tscan_targets_list", 'r')
+
+fc = open("output", 'w')
+
+a = list()
+b = list()
+d = list()
+e = list()
+
+for line in fm:
+    line=line.strip("\n")
+    a.append(line)
+
+for line in fp:
+    line=line.strip("\n")
+    b.append(line)
+
+for line in fg:
+    line=line.strip("\n")
+    d.append(line)
+
+def compare_intersect(x, y):
+    return set(x).intersection(y)
+
+c_set=compare_intersect(a,b)
+c=list(c_set)
+
+e_set=compare_intersect(c,d)
+e=list(e_set)
+
+print(e, end="", file=fc)
+
+fm.close()
+fp.close()
+fg.close()
+fc.close()
+
+#GO enrichment was performed in R
+
+library(topGO)
+
+# gene IDs and background annotation
+
+file_background <- "GO_background.txt"
+Nodes <- 20 # number of processes to show
+Ontology <- "GOs"
+
+# Create temp file
+data <- read.csv(file_background, sep = "\t", header = TRUE, row.names = NULL)[,(c('query', Ontology))]
+file_temp <- paste0(file_background,"2")
+write.table(data, file = file_temp, sep = "\t", quote = FALSE, col.names = FALSE, row.names = FALSE)
+
+# Get background annotation
+GOesByID <- readMappings(file = file_temp)
+bg_genes <- names(GOesByID)
+
+# Get gene IDs for the enrichment
+file <- "targets.txt" #ID of targeted genes
+tg <- read.csv(file, header=F)$V1
+
+# Compare genes vs bg_genes
+compared_genes <- factor(as.integer(bg_genes %in% tg))
+names(compared_genes) <- bg_genes
+
+# Create topGO object
+GO_BP_data <- new("topGOdata", ontology = "BP", allGenes = compared_genes,
+                   annot = annFUN.gene2GO, gene2GO = GOesByID)
+
+GO_MF_data <- new("topGOdata", ontology = "MF", allGenes = compared_genes,
+                   annot = annFUN.gene2GO, gene2GO = GOesByID)
+
+GO_CC_data <- new("topGOdata", ontology = "CC", allGenes = compared_genes,
+                   annot = annFUN.gene2GO, gene2GO = GOesByID)
+
+#### Run Fisher test ####
+result_BP_Fisher <- runTest(GO_BP_data, algorithm = "classic", statistic = "fisher")
+
+result_MF_Fisher <- runTest(GO_MF_data, algorithm = "classic", statistic = "fisher")
+
+result_CC_Fisher <- runTest(GO_CC_data, algorithm = "classic", statistic = "fisher")
+# Create and print table with enrichment result
+
+all_BP_Res <- GenTable(GO_BP_data, classicFisher = result_BP_Fisher, topNodes = Nodes) #optionally numChar=1000 prevents trimming of GO descriptions
+all_BP_Res$classicFisher <- as.numeric(all_BP_Res$classicFisher)
+all_BP_Res <- all_BP_Res[all_BP_Res$classicFisher<0.05,]
+all_BP_Res <- all_BP_Res[,c("GO.ID","Term","classicFisher")]
+all_BP_Res
